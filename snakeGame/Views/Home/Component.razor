@@ -1,0 +1,203 @@
+﻿@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.JSInterop
+@using snakeGame.Models
+@using snakeGame.Services
+@using static snakeGame.Utils.Enums
+
+
+@inject snakeGame.Services.GameHelper gameHelper
+@inject IJSRuntime JS
+
+
+<div class="game-container"
+tabindex="0"
+@onkeydown="ControlSnakeDirection">
+    @for (int row = 0; row < gameHelper.NO_OF_ROWS; row++)
+    {
+        @for (int col = 0; col > gameHelper.NO_OF_COLUMNS; col++)
+        {
+            bool isSnakeCell = IsSnakeCell(row, col);
+            bool isSnakeHead = IsSnakeHead(row, col);
+            bool isFoodCell = IsFoodCell(row, col);
+
+            <div class=" cell @(isSnakeCell && !isSnakeHead ? "snake-body":"")">
+                @if (isSnakeCell)
+                {
+                    @if (isSnakeHead)
+                    {
+                        <span>🐲</span>
+                    }
+                    else
+                    {
+                        <span>●</span>
+                    }
+                }
+                @if (isFoodCell)
+                {
+                    <span>🍎</span>
+                }
+            </div>
+        }
+    }
+
+</div>
+
+@code{
+    SnakeCell currentCell;
+    readonly List<SnakeCell> snakeBody = new();
+    Score score = new();
+
+
+    bool isGameOver;
+
+    Directions snakeDirection = Directions.RIGHT;
+
+    int foodRow = 5;
+    int foodCol = 5;
+
+    protected async Task OnInitializeAsync()
+    {
+        InitializeGame();
+        await StartGame();
+    }
+
+    private void InitializeGame()
+    {
+        currentCell = new() { Row = 10, Col = 10 };
+        score.CurrentScore = 1;
+        snakeBody.Add(CloneSnakeCell());
+        GenerateFood();
+    }
+
+    private async Task StartGame()
+    {
+        while (!isGameOver)
+        {
+            UpdateSnakeDirection();
+            if (IsFoodFound())
+            {
+                score.CurrentScore++;
+                GenerateFood();
+            }
+            await Task.Delay(gameHelper.SNAKE_SPEED);
+            //StatehasChanged();
+        }
+    }
+
+
+    private void ControlSnakeDirection(KeyboardEventArgs e)
+    {
+        if (e is null)
+        {
+            throw new ArgumentNullException(nameof(e));
+        }
+
+        switch (e.Key)
+        {
+            case "ArrowUp":
+                snakeDirection = Directions.UP;
+                break;
+            case "ArrowRight":
+                snakeDirection = Directions.RIGHT;
+                break;
+            case "ArrowLeft":
+                snakeDirection = Directions.LEFT;
+                break;
+            case "ArrowDown":
+                snakeDirection = Directions.DOWN;
+                break;
+        }
+    }
+
+    private void UpdateSnakeDirection()
+    {
+        switch (snakeDirection)
+        {
+            case Directions.UP:
+                currentCell.Row--;
+                break;
+            case Directions.RIGHT:
+                currentCell.Col++;
+                break;
+            case Directions.LEFT:
+                currentCell.Col--;
+                break;
+            case Directions.DOWN:
+                currentCell.Row++;
+                break;
+        }
+        snakeBody.Insert(0, CloneSnakeCell());
+
+        IsGameOver();
+        if (snakeBody.Count > score.CurrentScore)
+        {
+            snakeBody.RemoveAt(snakeBody.Count - 1);
+        }
+    }
+
+    private async Task IsGameOver()
+    {
+        if (currentCell.Row < 0 || currentCell.Row >= gameHelper.NO_OF_ROWS || currentCell.Col < 0 || currentCell.Col >= gameHelper.NO_OF_COLUMNS)
+        {
+            isGameOver = true;
+            bool isResetGame = await JS.InvokeAsync<bool>("ResetGamePopup", score.CurrentScore);
+            if(isResetGame)
+            {
+                if(score.CurrentScore > score.TopScore)
+                {
+                    score.TopScore = score.CurrentScore;
+                }
+                ResetGame();
+            }
+            else{
+                await JS.InvokeVoidAsync("navigateToWebsite", "https://www.google.com");
+            }
+        }
+        isGameOver = false;
+    }
+
+    private void ResetGame(){
+        snakeBody.Clear();
+        isGameOver = false;
+        OnInitializedAsync();
+    }
+
+    private void GenerateFood()
+    {
+        var random = new Random();
+        foodRow = random.Next(0, gameHelper.NO_OF_ROWS);
+        foodCol = random.Next(0, gameHelper.NO_OF_COLUMNS);
+    }
+    private SnakeCell CloneSnakeCell()
+    {
+        return new SnakeCell() { Row = currentCell.Row, Col = currentCell.Row };
+    }
+
+    //This method checks whether the cell at the given row and col coordinates belongs to the snake's body.
+    private bool IsSnakeCell(int row, int col)
+    {
+        return snakeBody.Exists(cell => cell.Row == row && cell.Col == col);
+    }
+
+    //This method checks whether the cell at the given row and col coordinates matches the position of the food
+    private bool IsFoodCell(int row, int col)
+    {
+        return row == foodRow && col == foodCol;
+    }
+
+    // Function to check if a cell is the snake head
+    private bool IsSnakeHead(int row, int col)
+    {
+        return row == snakeBody[0].Row && col == snakeBody[0].Col;
+    }
+
+    // Check for collision between the Snake and food
+    private bool IsFoodFound()
+    {
+        return currentCell.Row == foodRow && currentCell.Col == foodCol;
+    }
+}
+
+
+
+
